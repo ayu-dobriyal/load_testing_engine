@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NSMS — Security Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🛡️</div>
+      <div>
+        <div class="brand-name">NSMS</div>
+        <div class="brand-sub">Security Platform</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section-label">MONITORING</div>
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-view="overview" onclick="switchView('overview')">
+        <span class="nav-icon">📊</span> Overview
+      </a>
+      <a class="nav-item" data-view="alerts" onclick="switchView('alerts')">
+        <span class="nav-icon">🚨</span> Live Alerts
+        <span class="nav-badge" id="alertCountBadge" style="display:none">0</span>
+      </a>
+      <a class="nav-item" data-view="firewall" onclick="switchView('firewall')">
+        <span class="nav-icon">🔥</span> Firewall Rules
+      </a>
+    </nav>
+
+    <div class="sidebar-section-label">MANAGEMENT</div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" data-view="allowlist" onclick="switchView('allowlist')">
+        <span class="nav-icon">✅</span> Allowlist
+      </a>
+      <a class="nav-item" data-view="assets" onclick="switchView('assets')">
+        <span class="nav-icon">🖥️</span> Assets
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="connection-status" id="connectionStatus">
+        <span class="status-dot"></span>
+        <span id="connectionText">Connecting...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div>
+        <h1 class="page-title" id="pageTitle">Overview</h1>
+        <p class="page-subtitle" id="pageSubtitle">Real-time security monitoring and threat mitigation</p>
+      </div>
+      <div class="top-bar-actions">
+        <span class="live-indicator" id="liveIndicator" style="display:none">
+          <span class="pulse-dot"></span> LIVE ATTACK
+        </span>
+      </div>
+    </header>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- VIEW: Overview -->
+    <div id="view-overview" class="view active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Alerts</div>
+          <div class="stat-value" id="statTotalAlerts">0</div>
+          <div class="stat-footer">All time</div>
+        </div>
+        <div class="stat-card stat-danger">
+          <div class="stat-label">Active Blocks</div>
+          <div class="stat-value" id="statActiveRules">0</div>
+          <div class="stat-footer">Firewall rules</div>
+        </div>
+        <div class="stat-card stat-warning">
+          <div class="stat-label">Blocked IPs</div>
+          <div class="stat-value" id="statBlockedIps">0</div>
+          <div class="stat-footer">Unique sources</div>
+        </div>
+        <div class="stat-card stat-success">
+          <div class="stat-label">Allowlisted</div>
+          <div class="stat-value" id="statAllowlisted">0</div>
+          <div class="stat-footer">Protected IPs</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">24h Alerts</div>
+          <div class="stat-value" id="statAlerts24h">0</div>
+          <div class="stat-footer">Last 24 hours</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Live Feed -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Live Threat Feed</h3>
+            <span class="pulse-dot" id="feedPulse"></span>
+          </div>
+          <div class="live-feed" id="liveFeed">
+            <div class="feed-empty">Waiting for incoming threats...</div>
+          </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Recent Alerts</h3>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Time</th><th>Severity</th><th>Message</th></tr></thead>
+              <tbody id="recentAlertsBody">
+                <tr><td colspan="3" class="empty-state">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Rules Preview -->
+      <div class="card" style="margin-top:1rem">
+        <div class="card-header"><h3>Active Firewall Rules</h3></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Rule ID</th><th>Source IP</th><th>Target IP</th><th>Rule</th><th>Created</th><th>Expires</th><th>Status</th></tr></thead>
+            <tbody id="overviewRulesBody">
+              <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Alerts -->
+    <div id="view-alerts" class="view">
+      <div class="card">
+        <div class="card-header"><h3>All Security Alerts</h3><button class="btn btn-sm" onclick="loadAlerts()">Refresh</button></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Time</th><th>Severity</th><th>Message</th></tr></thead>
+            <tbody id="allAlertsBody">
+              <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Firewall -->
+    <div id="view-firewall" class="view">
+      <div class="card">
+        <div class="card-header"><h3>Firewall Rules</h3><button class="btn btn-sm" onclick="loadFirewallRules()">Refresh</button></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Rule ID</th><th>Source IP</th><th>Target IP</th><th>Rule</th><th>Created</th><th>Expires</th><th>Active</th></tr></thead>
+            <tbody id="allRulesBody">
+              <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Allowlist -->
+    <div id="view-allowlist" class="view">
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-header"><h3>Add IP to Allowlist</h3></div>
+        <div class="form-row">
+          <input type="text" id="allowlistIpInput" class="form-input" placeholder="e.g. 10.0.0.1">
+          <input type="text" id="allowlistDescInput" class="form-input" placeholder="Description (optional)">
+          <button class="btn btn-success" onclick="addAllowlistEntry()">Add</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Current Allowlist</h3></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>IP Address</th><th>Description</th><th>Added</th><th>Action</th></tr></thead>
+            <tbody id="allowlistBody">
+              <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Assets -->
+    <div id="view-assets" class="view">
+      <div class="card">
+        <div class="card-header"><h3>Discovered Network Assets</h3></div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>IP</th><th>MAC</th><th>OS</th><th>Discovered</th></tr></thead>
+            <tbody id="assetsBody">
+              <tr><td colspan="4" class="empty-state">No assets discovered yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>
