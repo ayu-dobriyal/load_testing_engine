@@ -108,13 +108,25 @@ async function loadFirewallRules() {
             <td>${esc(r.rule)}</td>
             <td class="mono">${fmtTime(r.created_at)}</td>
             <td class="mono">${fmtTime(r.expires_at)}</td>
-            <td><span class="${active ? 'status-active' : 'status-inactive'}">${active ? '● ACTIVE' : '○ Expired'}</span></td>
+            <td>
+              <span class="${active ? 'status-active' : 'status-inactive'}">${active ? '● ACTIVE' : '○ Expired'}</span>
+              ${active ? `<button class="btn btn-danger" style="padding:2px 6px; font-size:10px; margin-left:6px;" onclick="unblockRule('${r.id}')">Unblock</button>` : ''}
+            </td>
           </tr>`;
         }).join('');
 
     document.getElementById('overviewRulesBody').innerHTML = renderRows(rules.slice(0, 5));
     document.getElementById('allRulesBody').innerHTML = renderRows(rules);
   } catch (e) { console.error('Rules error:', e); }
+}
+
+async function unblockRule(id) {
+  if (!confirm('Unblock this firewall rule immediately?')) return;
+  try {
+    await fetch('/api/firewall-rules/' + id, { method: 'DELETE' });
+    loadFirewallRules();
+    loadStats();
+  } catch (e) { alert('Failed to unblock: ' + e.message); }
 }
 
 async function loadAllowlist() {
@@ -177,6 +189,7 @@ async function loadAssets() {
 
 function addLiveFeedItem(data) {
   const feed = document.getElementById('liveFeed');
+  if (!feed) return;
   const empty = feed.querySelector('.feed-empty');
   if (empty) empty.remove();
 
@@ -185,10 +198,11 @@ function addLiveFeedItem(data) {
   item.className = 'feed-item';
   item.innerHTML = `
     <span class="feed-time">${new Date().toLocaleTimeString()}</span>
-    <span class="severity-badge severity-${data.severity}">${data.severity}</span>
+    <span class="severity-badge severity-${data.severity || 'low'}">${data.severity || 'info'}</span>
     <span class="feed-text">
       <strong style="color:${statusColors[data.status] || '#648CFF'}">${(data.status || '').toUpperCase()}</strong>
-      — ${data.threatType || 'unknown'} from <span class="mono">${data.sourceIp}</span> → <span class="mono">${data.targetIp}</span>
+      — ${data.threatType || 'traffic'} from <span class="mono">${esc(data.sourceIp)}</span>
+      ${data.detail ? '<span style="color:var(--text-secondary); margin-left:6px; font-size:11px;">(' + esc(data.detail) + ')</span>' : ''}
       ${data.ruleId ? ' | Rule: <span class="mono">' + data.ruleId.substring(0,8) + '</span>' : ''}
     </span>`;
   feed.insertBefore(item, feed.firstChild);
@@ -197,10 +211,14 @@ function addLiveFeedItem(data) {
 }
 
 function showToast(data) {
+  if (data.severity === 'info' || data.threatType === 'normal_traffic') return;
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
   toast.className = 'toast ' + (data.severity || 'low');
   toast.innerHTML = `🚨 <strong>${(data.status || '').toUpperCase()}</strong> — ${data.threatType} from ${data.sourceIp}`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.remove(); }, 5000);
+}
   container.appendChild(toast);
   setTimeout(() => { toast.remove(); }, 5000);
 }

@@ -109,17 +109,23 @@ python python/sniffer.py
 3. Click **"Start Test Now"**.
 4. Open [http://localhost:4000](http://localhost:4000) to see the WAF intercepting threats, issuing kernel-level firewall blocks, and emitting live Socket.IO alerts.
 
-### Method B: Attack Simulator Tab
-1. Open [http://localhost:3000](http://localhost:3000) and click **"🔴 Attack Simulator"**.
-2. Select the vector:
-   - `SQL Injection Probe (UNION SELECT)`
-   - `Sensitive Path Recon (/.env probe)`
-   - `Direct HTTP Layer 7 Flood (DDoS)`
-   - `SYN Flood / Brute Force Threat Alert`
-3. Click **"Launch Attack Simulation"**.
+### Method B: Multi-IP Attack Campaign & Verification Suite
+1. Open [http://localhost:3000](http://localhost:3000) and click **"🔴 Attack Simulator"** in the sidebar.
+2. Select **IP Address Source Mode**:
+   - **Custom Multiple IPs List**: Enter or use presets (`Mixed Preset (4 Attackers + 1 Allowlist)`, `5 External Attackers`, `10 Botnet IPs`).
+   - **Dynamic Random IP Pool**: Auto-generates random botnet IPs.
+   - **Single IP Address**: Direct single-source verification.
+3. Configure **Requests Per IP** (e.g. 5–20 requests per IP) and **Execution Flow** (Sequential with configurable delay or Full Concurrency).
+4. Select Attack Vector (`SQL Injection`, `Sensitive Path Recon`, `HTTP DoS Flood`, or `SOAR Webhook Alerts`).
+5. Click **"Launch Multi-IP Attack Campaign"**:
+   - Watch the **Live Progress Bar** and counters increment in real-time (`Total Requests Sent`, `403 Forbidden Blocked`, `200 Allowed`, `Unique IPs Blocked`).
+   - Observe the **Multi-IP Defense Verification Matrix** table showing each IP's individual breakdown, first blocked request index, and verdict.
+   - Cross-check [http://localhost:4000](http://localhost:4000) to see active firewall rules and live alerts emitted instantaneously.
 
 ---
 
 ## 🛡️ Allowlist Failsafe Verification
-In the Attack Simulator, set **Target IP** to `10.0.0.99`.
-Because `10.0.0.99` is registered in the allowlist, the SOAR engine will automatically bypass the block rule, ensuring critical infrastructure cannot be locked out.
+In the **Attack Simulator**, use the **Mixed Preset** which includes `10.0.0.99`.
+- Malicious IPs (`192.168.1.50`, `192.168.1.51`, etc.) will be intercepted and **BLOCKED (HTTP 403)**.
+- Allowlisted IP `10.0.0.99` will return **✅ ALLOWED (HTTP 200)** due to the SOAR allowlist failsafe.
+- Administrators can unblock any firewall rule on demand directly from the NSMS Dashboard table.

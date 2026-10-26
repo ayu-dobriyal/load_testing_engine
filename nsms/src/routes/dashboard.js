@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { randomUUID } = require('crypto');
+const { removeFirewallRule } = require('../services/realFirewall');
+const { syncBlockedIps } = require('../middleware/wafMiddleware');
 
 // GET /api/dashboard/stats
 router.get('/stats', async (req, res, next) => {
@@ -36,6 +38,21 @@ router.get('/firewall-rules', async (req, res, next) => {
   try {
     const rows = await db.query('SELECT * FROM firewall_rules ORDER BY created_at DESC LIMIT 100');
     res.json({ rules: rows });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/firewall-rules/:id (Unblock Rule)
+router.delete('/firewall-rules/:id', async (req, res, next) => {
+  try {
+    const rules = await db.query('SELECT * FROM firewall_rules WHERE id = ?', [req.params.id]);
+    if (rules.length > 0) {
+      await db.query('UPDATE firewall_rules SET active = FALSE WHERE id = ?', [req.params.id]);
+      await removeFirewallRule(req.params.id);
+      if (typeof syncBlockedIps === 'function') await syncBlockedIps();
+      const io = req.app.get('io');
+      if (io) io.emit('rule_expired', { ruleId: req.params.id, sourceIp: rules[0].source_ip });
+    }
+    res.json({ message: 'Firewall rule unblocked successfully', id: req.params.id });
   } catch (err) { next(err); }
 });
 

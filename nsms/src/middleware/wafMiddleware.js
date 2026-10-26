@@ -44,6 +44,18 @@ async function wafMiddleware(req, res, next) {
 
   // 1. FAST CHECK: Is client IP already blocked?
   if (activeBlockCache.has(clientIp) && !isLocalAdmin) {
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('security:alert', {
+        sourceIp: clientIp,
+        targetIp: req.headers.host || '127.0.0.1',
+        severity: 'high',
+        threatType: 'blocked_traffic_drop',
+        status: 'blocked',
+        detail: `Rejected ${req.method} ${req.originalUrl || req.path} from actively blocked IP`,
+        timestamp: new Date().toISOString()
+      });
+    }
     return res.status(403).json({
       status: 'blocked',
       error: '403 Forbidden: IP address is actively blocked by NSMS Firewall Rule.',
@@ -114,6 +126,21 @@ async function wafMiddleware(req, res, next) {
     });
   }
 
+  // Announce incoming normal external requests to Live Dashboard
+  if (!isLocalAdmin && !req.path.startsWith('/api/dashboard')) {
+    if (io) {
+      io.emit('security:alert', {
+        sourceIp: clientIp,
+        targetIp: req.headers.host || '127.0.0.1',
+        severity: 'info',
+        threatType: 'normal_traffic',
+        status: 'allowed',
+        detail: `Normal request: ${req.method} ${req.path}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
   next();
 }
 
@@ -122,6 +149,17 @@ async function triggerWafMitigation({ sourceIp, threatType, severity, detail, io
     // Check allowlist
     const allowRows = await db.query('SELECT 1 FROM allowlist WHERE ip = ?', [sourceIp]);
     if (allowRows.length > 0) {
+      if (io) {
+        io.emit('security:alert', {
+          sourceIp,
+          targetIp: '127.0.0.1',
+          severity: 'info',
+          threatType: `${threatType} (ALLOWLISTED)`,
+          status: 'allowed',
+          detail: `Allowlisted IP bypassed WAF block for ${threatType}`,
+          timestamp: new Date().toISOString()
+        });
+      }
       return res.status(200).json({
         status: 'allowed',
         message: 'Source IP is on allowlist; WAF bypass granted'
@@ -176,4 +214,4 @@ async function triggerWafMitigation({ sourceIp, threatType, severity, detail, io
   }
 }
 
-module.exports = { wafMiddleware };
+module.exports = { wafMiddleware, syncBlockedIps };
