@@ -180,16 +180,7 @@ async function triggerWafMitigation({ sourceIp, threatType, severity, detail, io
     // Add to in-memory block cache immediately
     activeBlockCache.add(sourceIp);
 
-    // Call OS firewall
-    await addFirewallRule({ sourceIp, targetIp: '127.0.0.1', rule: ruleDesc, ttlHours, ruleId });
-
-    // Log to SIEM logs
-    await db.query(
-      'INSERT INTO logs (id, message, severity, created_at) VALUES (?, ?, ?, NOW())',
-      [randomUUID(), `[WAF AUTO-BLOCK] ${detail} | Rule ID: ${ruleId.substring(0, 8)}`, 'high']
-    );
-
-    // Broadcast to Live Dashboard
+    // Broadcast to Live Dashboard immediately
     if (io) {
       io.emit('security:alert', {
         sourceIp,
@@ -202,6 +193,15 @@ async function triggerWafMitigation({ sourceIp, threatType, severity, detail, io
         timestamp: new Date().toISOString()
       });
     }
+
+    // Call OS firewall asynchronously in background
+    addFirewallRule({ sourceIp, targetIp: '127.0.0.1', rule: ruleDesc, ttlHours, ruleId }).catch(() => {});
+
+    // Log to SIEM logs
+    await db.query(
+      'INSERT INTO logs (id, message, severity, created_at) VALUES (?, ?, ?, NOW())',
+      [randomUUID(), `[WAF AUTO-BLOCK] ${detail} | Rule ID: ${ruleId.substring(0, 8)}`, 'high']
+    );
 
     return res.status(403).json({
       status: 'blocked',

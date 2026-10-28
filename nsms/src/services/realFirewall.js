@@ -40,11 +40,16 @@ async function removeFirewallRule(ruleId) {
 
 function execCommand(cmd, label) {
   return new Promise((resolve) => {
-    console.log(`[Firewall] Executing: ${cmd}`);
     exec(cmd, (error, stdout, stderr) => {
       if (error) {
-        console.error(`[Firewall] Error (${label}):`, error.message);
-        // Don't throw — log and continue (graceful degradation)
+        const combined = `${error.message || ''} ${stderr || ''} ${stdout || ''}`.toLowerCase();
+        const isElevation = combined.includes('elevation') || combined.includes('privilege') || combined.includes('administrator') || error.code === 1;
+        const isNotFound = combined.includes('no rules match');
+        if (isElevation) {
+          console.log(`[Firewall Info] ${label}: OS firewall requires admin rights. Enforced via in-memory WAF.`);
+        } else if (!isNotFound) {
+          console.error(`[Firewall] Error (${label}):`, error.message);
+        }
         resolve({ success: false, error: error.message });
       } else {
         console.log(`[Firewall] Success (${label}):`, stdout.trim() || 'OK');

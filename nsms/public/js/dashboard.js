@@ -86,6 +86,27 @@ async function loadAlerts() {
           <td>${esc(a.message)}</td>
         </tr>`).join('');
 
+    // Pre-populate Live Threat Feed on startup if empty
+    const feed = document.getElementById('liveFeed');
+    if (feed && feed.querySelector('.feed-empty') && alerts.length > 0) {
+      feed.innerHTML = '';
+      alerts.slice(0, 15).forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'feed-item';
+        const isBlock = a.message.includes('BLOCK') || a.message.includes('BLOCKED');
+        const isAllow = a.message.includes('ALLOW');
+        const color = isBlock ? '#F06B75' : isAllow ? '#35C995' : '#648CFF';
+        const status = isBlock ? 'BLOCKED' : isAllow ? 'ALLOWED' : 'INFO';
+        item.innerHTML = `
+          <span class="feed-time">${fmtTime(a.created_at)}</span>
+          <span class="severity-badge severity-${a.severity || 'low'}">${a.severity || 'info'}</span>
+          <span class="feed-text">
+            <strong style="color:${color}">${status}</strong> — ${esc(a.message)}
+          </span>`;
+        feed.appendChild(item);
+      });
+    }
+
     const badge = document.getElementById('alertCountBadge');
     if (alerts.length > 0) { badge.style.display = 'inline'; badge.innerText = alerts.length; }
   } catch (e) { console.error('Alerts error:', e); }
@@ -216,9 +237,6 @@ function showToast(data) {
   const toast = document.createElement('div');
   toast.className = 'toast ' + (data.severity || 'low');
   toast.innerHTML = `🚨 <strong>${(data.status || '').toUpperCase()}</strong> — ${data.threatType} from ${data.sourceIp}`;
-  container.appendChild(toast);
-  setTimeout(() => { toast.remove(); }, 5000);
-}
   container.appendChild(toast);
   setTimeout(() => { toast.remove(); }, 5000);
 }
